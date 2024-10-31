@@ -74,13 +74,18 @@ impl TransportThread {
     }
 
     pub fn send(&self, envelope: Envelope) {
-        let _ = self.sender.send(Task::SendEnvelope(envelope));
+        // Using send here would mean that when the channel fills up for whatever
+        // reason, trying to send an envelope would block everything. We'd rather
+        // drop the envelope in that case.
+        if let Err(e) = self.sender.try_send(Task::SendEnvelope(envelope)) {
+            sentry_debug!("envelope dropped: {e}");
+        }
     }
 
     pub fn flush(&self, timeout: Duration) -> bool {
         let (sender, receiver) = sync_channel(1);
         let _ = self.sender.send(Task::Flush(sender));
-        receiver.recv_timeout(timeout).is_err()
+        receiver.recv_timeout(timeout).is_ok()
     }
 }
 

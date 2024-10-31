@@ -782,7 +782,7 @@ impl Default for Breadcrumb {
 /// An IP address, either IPv4, IPv6 or Auto.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
 pub enum IpAddress {
-    /// The IP address needs to be infered from the user's context.
+    /// The IP address needs to be inferred from the user's context.
     #[default]
     Auto,
     /// The exact given IP address (v4 or v6).
@@ -1595,7 +1595,7 @@ pub struct Event<'a> {
     /// A release identifier.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release: Option<Cow<'a, str>>,
-    /// An optional distribution identifer.
+    /// An optional distribution identifier.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dist: Option<Cow<'a, str>>,
     /// An optional environment identifier.
@@ -1989,6 +1989,9 @@ pub struct Transaction<'a> {
     /// Optionally HTTP request data to be sent along.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request: Option<Request>,
+    /// Optionally the server (or device) name of this event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<Cow<'a, str>>,
 }
 
 impl<'a> Default for Transaction<'a> {
@@ -2008,6 +2011,7 @@ impl<'a> Default for Transaction<'a> {
             spans: Default::default(),
             contexts: Default::default(),
             request: Default::default(),
+            server_name: Default::default(),
         }
     }
 }
@@ -2035,6 +2039,7 @@ impl<'a> Transaction<'a> {
             spans: self.spans,
             contexts: self.contexts,
             request: self.request,
+            server_name: self.server_name.map(|x| Cow::Owned(x.into_owned())),
         }
     }
 

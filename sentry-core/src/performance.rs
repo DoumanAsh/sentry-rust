@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -260,6 +261,14 @@ impl TransactionOrSpan {
         }
     }
 
+    /// Sets a tag to a specific value.
+    pub fn set_tag<V: ToString>(&self, key: &str, value: V) {
+        match self {
+            TransactionOrSpan::Transaction(transaction) => transaction.set_tag(key, value),
+            TransactionOrSpan::Span(span) => span.set_tag(key, value),
+        }
+    }
+
     /// Get the TransactionContext of the Transaction/Span.
     ///
     /// Note that this clones the underlying value.
@@ -367,7 +376,7 @@ pub(crate) struct TransactionInner {
 
 type TransactionArc = Arc<Mutex<TransactionInner>>;
 
-/// Functional implementation of how a new transation's sample rate is chosen.
+/// Functional implementation of how a new transaction's sample rate is chosen.
 ///
 /// Split out from `Client.is_transaction_sampled` for testing.
 #[cfg(feature = "client")]
@@ -423,6 +432,20 @@ impl<'a> TransactionData<'a> {
             Box::new(rx.extra.iter())
         } else {
             Box::new(std::iter::empty())
+        }
+    }
+
+    /// Set some extra information to be sent with this Transaction.
+    pub fn set_data(&mut self, key: Cow<'a, str>, value: protocol::Value) {
+        if let Some(transaction) = self.0.transaction.as_mut() {
+            transaction.extra.insert(key.into(), value);
+        }
+    }
+
+    /// Set some extra information to be sent with this Transaction.
+    pub fn set_tag(&mut self, key: Cow<'_, str>, value: String) {
+        if let Some(transaction) = self.0.transaction.as_mut() {
+            transaction.tags.insert(key.into(), value);
         }
     }
 }
@@ -489,6 +512,14 @@ impl Transaction {
         let mut inner = self.inner.lock().unwrap();
         if let Some(transaction) = inner.transaction.as_mut() {
             transaction.extra.insert(key.into(), value);
+        }
+    }
+
+    /// Sets a tag to a specific value.
+    pub fn set_tag<V: ToString>(&self, key: &str, value: V) {
+        let mut inner = self.inner.lock().unwrap();
+        if let Some(transaction) = inner.transaction.as_mut() {
+            transaction.tags.insert(key.into(), value.to_string());
         }
     }
 
@@ -570,6 +601,7 @@ impl Transaction {
                     transaction.release.clone_from(&opts.release);
                     transaction.environment.clone_from(&opts.environment);
                     transaction.sdk = Some(std::borrow::Cow::Owned(client.sdk_info.clone()));
+                    transaction.server_name.clone_from(&opts.server_name);
 
                     drop(inner);
 
@@ -610,6 +642,18 @@ impl Transaction {
 /// A smart pointer to a span's [`data` field](protocol::Span::data).
 pub struct Data<'a>(MutexGuard<'a, protocol::Span>);
 
+impl<'a> Data<'a> {
+    /// Set some extra information to be sent with this Span.
+    pub fn set_data(&mut self, key: String, value: protocol::Value) {
+        self.0.data.insert(key, value);
+    }
+
+    /// Set some tag to be sent with this Span.
+    pub fn set_tag(&mut self, key: String, value: String) {
+        self.0.tags.insert(key, value);
+    }
+}
+
 impl<'a> Deref for Data<'a> {
     type Target = BTreeMap<String, protocol::Value>;
 
@@ -642,6 +686,12 @@ impl Span {
     pub fn set_data(&self, key: &str, value: protocol::Value) {
         let mut span = self.span.lock().unwrap();
         span.data.insert(key.into(), value);
+    }
+
+    /// Sets a tag to a specific value.
+    pub fn set_tag<V: ToString>(&self, key: &str, value: V) {
+        let mut span = self.span.lock().unwrap();
+        span.tags.insert(key.into(), value.to_string());
     }
 
     /// Returns a smart pointer to the span's [`data` field](protocol::Span::data).
